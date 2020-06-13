@@ -69,16 +69,27 @@ def allignBookTextWithJson(text, wordDataFromJson):
 
 def cutWavFilesForTranscripts(wordDataFromJson, pathToWavFile, text, fileName):
     lastFileWasCut = True
+    temporaryListOfWordsUsedForMatching = []
+    wordsToMatchInWholeText = ""
 
     i = 0
     while i < len(wordDataFromJson):
 
         if lastFileWasCut:
-            temporaryWordsForLongTranscripts = []
+            temporaryListOfWordsUsedForMatching = []
             cutStart = getTimeSpanFromString(wordDataFromJson[i].startTime)
             wordsToMatchInWholeText = ""
             lastFileWasCut = False
 
+        temporaryListOfWordsUsedForMatching.append(wordDataFromJson[i])
+        wordsToMatchInWholeText = wordDataFromJson[i] + ' '
+        indexOfMatchedWordsInText = text.find(wordsToMatchInWholeText)
+        if indexOfMatchedWordsInText != -1 & wordsToMatchInWholeText.split() >= 4:
+
+
+
+
+def cutAudioAndWriteToFile():
 
 
 
