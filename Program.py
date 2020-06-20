@@ -1,16 +1,16 @@
 import re
 import json
 import datetime
-import scipy.io.wavfile
-import numpy
 import os.path
+from pydub import AudioSegment
 import Objects as o
 
 pathToBook = "C:/Users/Povilas Kulevicius/Desktop/VoiceRecognitionTools/SequenceMatcher2/Resources/Hobitas/Book/chapter-1.txt"
 pathToJsonTranscripts = "C:/Users/Povilas Kulevicius/Desktop/VoiceRecognitionTools/SequenceMatcher2/Resources/Hobitas/Transcripts/02 - John R. R. Tolkien - Hobitas.json"
-pathToWav = ""
+pathToWav = "C:/Users/Povilas Kulevicius/Desktop/VoiceRecognitionTools/SequenceMatcher2/Resources/Hobitas/Audio/02 - John R. R. Tolkien - Hobitas.wav"
+newAudioDestination = "C:/Users/Povilas Kulevicius/Desktop/VoiceRecognitionTools/SequenceMatcher2/Resources/Hobitas/Cut"
 
-cutTranscriptsName = ""
+cutTranscriptsName = "Hobitas"
 
 
 def main():
@@ -18,7 +18,7 @@ def main():
     textFromFileWithRemovedUnnecessaryCharacters = removeUnnecessaryCharacters(textFromFile)
     wordDataFromJson = readGoogleJson(pathToJsonTranscripts)
     textFromFile, wordDataFromJson = allignBookTextWithJson(textFromFileWithRemovedUnnecessaryCharacters, wordDataFromJson)
-    cutWavFilesForTranscripts(wordDataFromJson, pathToWav, textFromFile, cutTranscriptsName)
+    tooLongTranscripts = cutWavFilesForTranscripts(wordDataFromJson, textFromFile)
     print()
 
 
@@ -70,70 +70,70 @@ def allignBookTextWithJson(text, wordDataFromJson):
     return text, wordDataFromJson
 
 
-def cutWavFilesForTranscripts(wordDataFromJson, pathToWavFile, text, fileName):
+def cutWavFilesForTranscripts(wordDataFromJson, text):
     lastFileWasCut = True
-    temporaryListOfWordsUsedForMatching = []
-    wordsToMatchInWholeText = ""
+    temporaryListOfWordsUsedForMatchingTooLongTranscripts = []
+    wordsToMatchInWholeText = ''
     cutStart = datetime.datetime.now()
     fileNameIndex = 0
+    tooLongTranscripts = []
 
     i = 0
     while i < len(wordDataFromJson):
 
         if lastFileWasCut:
-            temporaryListOfWordsUsedForMatching = []
+            temporaryListOfWordsUsedForMatchingTooLongTranscripts = []
             cutStart = getTimeSpanFromString(wordDataFromJson[i].startTime)
             wordsToMatchInWholeText = ""
             lastFileWasCut = False
             fileNameIndex += 1
 
-        temporaryListOfWordsUsedForMatching.append(wordDataFromJson[i])
-        wordsToMatchInWholeText = wordDataFromJson[i] + ' '
+        temporaryListOfWordsUsedForMatchingTooLongTranscripts.append(wordDataFromJson[i])
+        wordsToMatchInWholeText += f'{wordDataFromJson[i].word} '
         indexOfMatchedWordsInText = text.find(wordsToMatchInWholeText)
-        if indexOfMatchedWordsInText != -1 & wordsToMatchInWholeText.split() >= 4:
-            cutAudioAndWriteToFile(text, wordsToMatchInWholeText, wordDataFromJson[i], cutStart, fileNameIndex)
+        if indexOfMatchedWordsInText != -1 and len(wordsToMatchInWholeText.split()) >= 4:
+            text = cutAudioAndWriteToFile(text, wordsToMatchInWholeText, wordDataFromJson[i], cutStart, fileNameIndex, tooLongTranscripts, temporaryListOfWordsUsedForMatchingTooLongTranscripts)
+            lastFileWasCut = True
+
+        if len(wordsToMatchInWholeText.split()) >= 4:
+            wordsToMatchInWholeText = wordsToMatchInWholeText.split(' ', 1)[1]
+
+        i += 1
+
+    return tooLongTranscripts
 
 
-
-def cutAudioAndWriteToFile(wholeText, textToFind, lastWordData, audioStart, fileNameIndex):
-    transcript, remainingText = getTranscriptAndRemoveFromWholeText(wholeText, textToFind)
+def cutAudioAndWriteToFile(wholeText, textToFind, lastWordData, audioStart, fileNameIndex, tooLongTranscripts, temporaryListOfWordsUsedForMatchingTooLongTranscripts):
+    transcript, wholeText = getTranscriptAndRemoveFromWholeText(wholeText, textToFind)
     audioEnd = getTimeSpanFromString(lastWordData.endTime)
-    fileWasWriten = trimWavFile(audioStart, audioEnd, pathToWav, f'{cutTranscriptsName} 1_{fileNameIndex}_{transcript}.wav')
+    fileWasWriten = trimWavFile(audioStart, audioEnd, f'{cutTranscriptsName} 1_{fileNameIndex}_{transcript}.wav')
 
     if not fileWasWriten:
-        
+        tooLongTranscripts.append(o.TranscriptData(transcript, temporaryListOfWordsUsedForMatchingTooLongTranscripts))
+
+    fileNameIndex += 1
+    return wholeText
 
 def getTranscriptAndRemoveFromWholeText(wholeText, textToFind):
     indexOfFoundText = wholeText.find(textToFind) + len(textToFind.strip())
     fileName = wholeText[:indexOfFoundText]
 
     if len(wholeText.strip()) != len(textToFind.strip()):
-        remainingText = wholeText[:indexOfFoundText + 1]
+        remainingText = wholeText[indexOfFoundText + 1:]
     else:
         remainingText = ""
 
     return fileName, remainingText
 
 
-def trimWavFile(audioStart, audioEnd, fileName, outputFileName):
-    fs1, y1 = scipy.io.wavfile.read(fileName)
-    l1 = numpy.array([[audioStart, audioEnd]])
-    l1 = numpy.ceil(l1 * fs1)  # get integer indices into the wav file - careful of end of array reading with a check for greater than y1.shape
-    newWavFileAsList = []
-    for elem in l1:
-        startRead = elem[0]
-        endRead = elem[1]
-        if startRead >= y1.shape[0]:
-            startRead = y1.shape[0] - 1
-        if endRead >= y1.shape[0]:
-            endRead = y1.shape[0] - 1
-        newWavFileAsList.extend(y1[startRead:endRead])
+def trimWavFile(audioStart, audioEnd, outputFileName):
+    bookAudio = AudioSegment.from_wav(pathToWav)
+    audioStartInt = audioStart.second * 1000 + audioStart.microsecond / 1000 - (0) # number in brackets is used for adjusting cut time
+    audioEndInt = audioEnd.second * 1000 + audioEnd.microsecond / 1000 + (240)
+    bookAudio = bookAudio[audioStartInt:audioEndInt]
+    bookAudio.export(f'{newAudioDestination}/{outputFileName}', format="wav")
 
-    newWavFile = numpy.array(newWavFileAsList)
-
-    scipy.io.wavfile.write(outputFileName, fs1, newWavFile)
-
-    if os.path.isfile(fileName):
+    if os.path.isfile(f'{newAudioDestination}/{outputFileName}'):
         return True
     else:
         return False
@@ -142,6 +142,10 @@ def trimWavFile(audioStart, audioEnd, fileName, outputFileName):
 def getTimeSpanFromString(timeString):
     indexOfSCharacter = timeString.find('s')
     timeString = timeString[:indexOfSCharacter]
+
+    if timeString.find('.') == -1:
+        timeString = f'{timeString}.0'
+
     return datetime.datetime.strptime(timeString, '%S.%f').time()
 
 
